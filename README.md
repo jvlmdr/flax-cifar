@@ -20,12 +20,12 @@ Refer to the [wandb project](https://wandb.ai/jvlmdr/flax-cifar).
 
 | Model | Acc. |
 | ----- | ---- |
-| ResNetV1-18 | ... |
-| ResNetV1-50 | ... |
-| ResNetV2-18 | ... |
-| ResNetV2-50 | ... |
-| WideResNet-28-2 | ... |
-| WideResNet-28-8 | ... |
+| ResNetV1-18 | 94.1% |
+| ResNetV1-50 | 94.3% |
+| ResNetV2-18 | 94.6% |
+| ResNetV2-50 | 93.6% |
+| WideResNet-28-2 | 93.2% |
+| WideResNet-28-8 | 95.0% |
 
 
 ### Usage
