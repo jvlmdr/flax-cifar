@@ -116,6 +116,8 @@ def main(_):
         return model.apply({'params': params, 'batch_stats': batch_stats}, inputs, train=False)
 
     for epoch in range(config.train.num_epochs + 1):
+        metrics = {}
+
         val_outputs = collections.defaultdict(list)
         for inputs, labels in tqdm.tqdm(val_loader, f'val epoch {epoch}'):
             inputs, labels = jnp.asarray(inputs.numpy()), jnp.asarray(labels.numpy())
@@ -128,14 +130,14 @@ def main(_):
             val_outputs['loss'].append(loss)
         val_outputs = {k: np.concatenate(v) for k, v in val_outputs.items()}
 
-        metrics = {
+        metrics.update({
             'val_loss': np.mean(val_outputs['loss']),
             'val_acc': np.mean(val_outputs['acc']),
-        }
-        wandb.log(metrics, step=epoch)
-        print('val epoch {:d}: acc {:.2%}'.format(epoch, metrics['val_acc']))
+        })
 
         if not epoch < config.train.num_epochs:
+            wandb.log(metrics)
+            print('epoch {:d}: val_acc {:.2%}'.format(epoch, metrics['val_acc']))
             break
 
         train_outputs = collections.defaultdict(list)
@@ -153,13 +155,14 @@ def main(_):
             train_outputs['objective'].append([objective])
         train_outputs = {k: np.concatenate(v) for k, v in train_outputs.items()}
 
-        metrics = {
+        metrics.update({
             'train_loss': np.mean(train_outputs['loss']),
             'train_acc': np.mean(train_outputs['acc']),
             'train_objective': np.mean(train_outputs['objective']),
-        }
-        wandb.log(metrics, step=epoch)
-        print('train epoch {:d}: objective {:.6g}'.format(epoch, metrics['train_objective']))
+        })
+        wandb.log(metrics)
+        print('epoch {:d}: train_objective {:.6g}, val_acc {:.2%}'.format(
+            epoch, metrics['train_objective'], metrics['val_acc']))
 
 
 def setup_data() -> Tuple[int, Tuple[int, int, int], Dataset, Dataset]:

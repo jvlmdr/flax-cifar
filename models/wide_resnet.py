@@ -76,7 +76,6 @@ class WRNBlock(nn.Module):
 
 class WideResNetGeneral(nn.Module):
     """Base WideResNet implementation."""
-    nin: int
     nclass: int
     blocks_per_group: Tuple[int]
     width: int
@@ -101,16 +100,14 @@ class WideResNetGeneral(nn.Module):
 
 
 def WideResNet(
-        nin: int,
-        nclass: int,
+        num_classes: int,
         depth: int = 28,
         width: int = 2,
         bn: Callable = partial(nn.BatchNorm, momentum=BN_MOM, epsilon=BN_EPS)):
     """Creates WideResNet instance.
 
     Args:
-        nin: number of channels in the input image.
-        nclass: number of output classes.
+        num_classes: number of output classes.
         depth: number of convolution layers. (depth-4) should be divisible by 6
         width: multiplier to the number of convolution filters.
         bn: module which used as batch norm function.
@@ -118,4 +115,4 @@ def WideResNet(
     assert (depth - 4) % 6 == 0, 'depth should be 6n+4'
     n = (depth - 4) // 6
     blocks_per_group = (n,) * 3
-    return WideResNetGeneral(nin, nclass, blocks_per_group, width, bn)
+    return WideResNetGeneral(num_classes, blocks_per_group, width, bn)
