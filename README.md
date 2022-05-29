@@ -9,6 +9,8 @@ The WideResNet and ResNetV2 implementations were based on the [objax.zoo package
 
 The ResNetV1 implementation was based on the [flax imagenet example](https://github.com/google/flax/tree/main/examples/imagenet).
 
+The DenseNet implementation was based on the original [pytorch-cifar repo](https://github.com/kuangliu/pytorch-cifar).
+
 These were generally modified as little as possible.
 
 
