@@ -18,14 +18,15 @@ All results using default config (see `configs/default.py`).
 
 Refer to the [wandb project](https://wandb.ai/jvlmdr/flax-cifar).
 
-| Model | Acc. |
-| ----- | ---- |
-| ResNetV1-18 | 94.1% |
-| ResNetV1-50 | 94.3% |
-| ResNetV2-18 | 94.6% |
-| ResNetV2-50 | 93.6% |
-| WideResNet-28-2 | 93.2% |
-| WideResNet-28-8 | 95.0% |
+| Model | Params | Acc. |
+| :--   |    --: |  --: |
+| ResNetV1-18 | 11,173,962 | 94.1% |
+| ResNetV1-50 | 23,520,842 | 94.3% |
+| ResNetV2-18 | 11,172,170 | 94.6% |
+| ResNetV2-50 | 23,513,162 | 93.6% |
+| WideResNet-28-2 | 1,467,610 | 93.2% |
+| WideResNet-28-8 | 23,354,842 | 95.0% |
+| DenseNet | 1,000,618 | 93.6% |
 
 
 ### Usage
