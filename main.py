@@ -20,6 +20,7 @@ from torchvision import transforms
 import tqdm
 import wandb
 
+import models.densenet
 import models.resnet_v1
 import models.resnet_v2
 import models.wide_resnet
@@ -201,6 +202,8 @@ def make_model(
         model = model_fn(num_classes=num_classes, **config.model.resnet)
     elif config.model.arch == 'wrn':
         model = models.wide_resnet.WideResNet(num_classes=num_classes, **config.model.wrn)
+    elif config.model.arch == 'densenet_cifar':
+        model = models.densenet.densenet_cifar(num_classes=num_classes)
     else:
         raise ValueError('unknown architecture', config.model.arch)
     return model
