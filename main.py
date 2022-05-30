@@ -122,6 +122,27 @@ def main(_):
     for epoch in range(config.train.num_epochs + 1):
         metrics = {}
 
+        if epoch > 0:
+            train_outputs = collections.defaultdict(list)
+            for inputs, labels in tqdm.tqdm(train_loader, f'train epoch {epoch}'):
+                inputs, labels = jnp.asarray(inputs.numpy()), jnp.asarray(labels.numpy())
+                inputs = jnp.moveaxis(inputs, -3, -1)
+                opt_state, params, mutated_vars, objective, logits = train_step(
+                    opt_state, params, {'batch_stats': batch_stats}, (inputs, labels))
+                batch_stats = mutated_vars['batch_stats']
+                loss = loss_with_logits(labels, logits)
+                pred = jnp.argmax(logits, axis=-1)
+                acc = (pred == labels)
+                train_outputs['acc'].append(acc)
+                train_outputs['loss'].append(loss)
+                train_outputs['objective'].append([objective])
+            train_outputs = {k: np.concatenate(v) for k, v in train_outputs.items()}
+            metrics.update({
+                'train_loss': np.mean(train_outputs['loss']),
+                'train_acc': np.mean(train_outputs['acc']),
+                'train_objective': np.mean(train_outputs['objective']),
+            })
+
         val_outputs = collections.defaultdict(list)
         for inputs, labels in tqdm.tqdm(val_loader, f'val epoch {epoch}'):
             inputs, labels = jnp.asarray(inputs.numpy()), jnp.asarray(labels.numpy())
@@ -133,40 +154,17 @@ def main(_):
             val_outputs['acc'].append(acc)
             val_outputs['loss'].append(loss)
         val_outputs = {k: np.concatenate(v) for k, v in val_outputs.items()}
-
         metrics.update({
             'val_loss': np.mean(val_outputs['loss']),
             'val_acc': np.mean(val_outputs['acc']),
         })
 
-        if not epoch < config.train.num_epochs:
-            wandb.log(metrics)
-            print('epoch {:d}: val_acc {:.2%}'.format(epoch, metrics['val_acc']))
-            break
-
-        train_outputs = collections.defaultdict(list)
-        for inputs, labels in tqdm.tqdm(train_loader, f'train epoch {epoch}'):
-            inputs, labels = jnp.asarray(inputs.numpy()), jnp.asarray(labels.numpy())
-            inputs = jnp.moveaxis(inputs, -3, -1)
-            opt_state, params, mutated_vars, objective, logits = train_step(
-                opt_state, params, {'batch_stats': batch_stats}, (inputs, labels))
-            batch_stats = mutated_vars['batch_stats']
-            loss = loss_with_logits(labels, logits)
-            pred = jnp.argmax(logits, axis=-1)
-            acc = (pred == labels)
-            train_outputs['acc'].append(acc)
-            train_outputs['loss'].append(loss)
-            train_outputs['objective'].append([objective])
-        train_outputs = {k: np.concatenate(v) for k, v in train_outputs.items()}
-
-        metrics.update({
-            'train_loss': np.mean(train_outputs['loss']),
-            'train_acc': np.mean(train_outputs['acc']),
-            'train_objective': np.mean(train_outputs['objective']),
-        })
         wandb.log(metrics)
-        print('epoch {:d}: train_objective {:.6g}, val_acc {:.2%}'.format(
-            epoch, metrics['train_objective'], metrics['val_acc']))
+        if epoch == 0:
+            print('epoch {:d}: val_acc {:.2%}'.format(epoch, metrics['val_acc']))
+        else:
+            print('epoch {:d}: val_acc {:.2%}, train_objective {:.6g}'.format(
+                epoch, metrics['val_acc'], metrics['train_objective']))
 
 
 def setup_data() -> Tuple[int, Tuple[int, int, int], Dataset, Dataset]:
