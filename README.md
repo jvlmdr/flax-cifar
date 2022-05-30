@@ -9,9 +9,7 @@ The WideResNet and ResNetV2 implementations were based on the [objax.zoo package
 
 The ResNetV1 implementation was based on the [flax imagenet example](https://github.com/google/flax/tree/main/examples/imagenet).
 
-The DenseNet implementation was based on the original [pytorch-cifar repo](https://github.com/kuangliu/pytorch-cifar).
-
-These were generally modified as little as possible.
+The DenseNet and VGG implementations were based on the [pytorch-cifar repo](https://github.com/kuangliu/pytorch-cifar).
 
 
 ### Results
@@ -22,6 +20,8 @@ Refer to the [wandb project](https://wandb.ai/jvlmdr/flax-cifar).
 
 | Model | Params | Acc. |
 | :--   |    --: |  --: |
+| VGG-16 backbone | 14,724,042 | 92.1% |
+| VGG-16 | 33,650,634 | 92.2% |
 | ResNetV1-18 | 11,173,962 | 94.1% |
 | ResNetV1-50 | 23,520,842 | 94.0% |
 | ResNetV2-18 | 11,172,170 | 94.7% |
