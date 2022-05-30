@@ -28,7 +28,8 @@ Refer to the [wandb project](https://wandb.ai/jvlmdr/flax-cifar).
 | ResNetV2-50 | 23,513,162 | 93.6% |
 | WideResNet-28-2 | 1,467,610 | 93.2% |
 | WideResNet-28-8 | 23,354,842 | 95.0% |
-| DenseNet | 1,000,618 | 93.6% |
+| DenseNet121-12 | 1,000,618 | 93.6% |
+| DenseNet121-32 | 6,956,298 | 94.9% |
 
 
 ### Usage
