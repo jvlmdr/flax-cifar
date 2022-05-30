@@ -1,3 +1,5 @@
+# Modified from: github.com/kuangliu/pytorch-cifar (models/vgg.py)
+
 from functools import partial
 from typing import Callable, Tuple
 
