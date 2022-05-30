@@ -71,8 +71,12 @@ def main(_):
     sys.stdout.writelines(x + '\n' for x in util.dict_tree_format(util.tree_shape(batch_stats)))
     sys.stdout.flush()
 
+    def filter_kernel_params(tree):
+        return [x for path, x in util.dict_tree_items(tree) if path[-1] == 'kernel']
+
     print('total number of params:',
           tree_util.tree_reduce(np.add, tree_util.tree_map(lambda x: np.prod(x.shape), params)))
+    print('number of linear layers:', sum(1 for _ in filter_kernel_params(params)))
 
     total_steps = config.train.num_epochs * len(train_loader)
     schedule = optax.cosine_decay_schedule(config.train.base_learning_rate, total_steps)
@@ -80,9 +84,6 @@ def main(_):
     opt_state = tx.init(params)
 
     loss_with_logits = jax.vmap(jaxopt.loss.multiclass_logistic_loss)
-
-    def filter_kernel_params(tree):
-        return [x for path, x in util.dict_tree_items(tree) if path[-1] == 'kernel']
 
     def objective_fn(params, mutable_vars, data):
         # Designed for use with jax.value_and_grad(..., has_aux=True).
@@ -202,8 +203,15 @@ def make_model(
         model = model_fn(num_classes=num_classes, **config.model.resnet)
     elif config.model.arch == 'wrn':
         model = models.wide_resnet.WideResNet(num_classes=num_classes, **config.model.wrn)
-    elif config.model.arch == 'densenet_cifar':
-        model = models.densenet.densenet_cifar(num_classes=num_classes)
+    elif config.model.arch.startswith('densenet'):
+        model_fn = {
+            'densenet_cifar': models.densenet.densenet_cifar,
+            'densenet121': models.densenet.DenseNet121,
+            'densenet169': models.densenet.DenseNet169,
+            'densenet201': models.densenet.DenseNet201,
+            'densenet161': models.densenet.DenseNet161,
+        }[config.model.arch]
+        model = model_fn(num_classes=num_classes)
     else:
         raise ValueError('unknown architecture', config.model.arch)
     return model
