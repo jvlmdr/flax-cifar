@@ -24,6 +24,7 @@ import wandb
 import models.densenet
 import models.resnet_v1
 import models.resnet_v2
+import models.vgg
 import models.wide_resnet
 import util
 
@@ -207,6 +208,10 @@ def make_model(
             'densenet169_32': models.densenet.DenseNet169,
             'densenet201_32': models.densenet.DenseNet201,
             'densenet161_48': models.densenet.DenseNet161,
+            'vgg11': models.vgg.VGG11,
+            'vgg13': models.vgg.VGG13,
+            'vgg16': models.vgg.VGG16,
+            'vgg19': models.vgg.VGG19,
         }[config.arch]
     except KeyError as ex:
         raise ValueError('unknown architecture', ex)
