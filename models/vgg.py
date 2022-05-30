@@ -9,10 +9,10 @@ ModuleDef = Callable[..., nn.Module]
 
 class Backbone(nn.Module):
     stages: Tuple[Tuple[int, ...], ...]
-    norm: ModuleDef
+    norm: ModuleDef = nn.BatchNorm
 
     @nn.compact
-    def __call__(self, x, train: bool):
+    def __call__(self, x, train: bool = True):
         for i, stage in enumerate(self.stages):
             for j, dim in enumerate(stage):
                 suffix = '{:d}_{:d}'.format(i + 1, j + 1)
@@ -24,23 +24,54 @@ class Backbone(nn.Module):
         return x
 
 
+class MLP(nn.Module):
+    dims: Tuple[int, ...]
+    norm: ModuleDef = nn.BatchNorm
+
+    @nn.compact
+    def __call__(self, x, train: bool = True):
+        for dim in self.dims:
+            x = nn.Dense(dim, use_bias=False)(x)
+            x = self.norm(use_running_average=not train)(x)
+            x = nn.relu(x)
+        return x
+
+
 class VGG(nn.Module):
-    stages: Tuple[Tuple[int, ...], ...]
+    conv_stages: Tuple[Tuple[int, ...], ...]
+    mlp_dims: Tuple[int, ...]
     num_classes: int
     norm: ModuleDef = nn.BatchNorm
 
     def setup(self):
-        self.features = Backbone(stages=self.stages, norm=self.norm)
+        self.backbone = Backbone(stages=self.conv_stages, norm=self.norm)
+        if self.mlp_dims:
+            self.mlp = MLP(self.mlp_dims, norm=self.norm)
         self.classifier = nn.Dense(self.num_classes)
 
     def __call__(self, x, train: bool = True):
-        x = self.features(x, train)
+        x = self.backbone(x, train)
         x = jnp.reshape(x, (x.shape[0], -1))
+        if self.mlp_dims:
+            x = self.mlp(x, train)
         x = self.classifier(x)
         return x
 
 
-VGG11 = partial(VGG, ((64,), (128,), (256, 256), (512, 512), (512, 512))),
-VGG13 = partial(VGG, ((64, 64), (128, 128), (256, 256), (512, 512), (512, 512)))
-VGG16 = partial(VGG, ((64, 64), (128, 128), (256, 256, 256), (512, 512, 512), (512, 512, 512)))
-VGG19 = partial(VGG, ((64, 64), (128, 128), (256, 256, 256, 256), (512, 512, 512, 512), (512, 512, 512, 512)))
+LiteVGG11 = partial(
+    VGG, ((64,), (128,), (256, 256), (512, 512), (512, 512)), ())
+LiteVGG13 = partial(
+    VGG, ((64, 64), (128, 128), (256, 256), (512, 512), (512, 512)), ())
+LiteVGG16 = partial(
+    VGG, ((64, 64), (128, 128), (256, 256, 256), (512, 512, 512), (512, 512, 512)), ())
+LiteVGG19 = partial(
+    VGG, ((64, 64), (128, 128), (256, 256, 256, 256), (512, 512, 512, 512), (512, 512, 512, 512)), ())
+
+VGG11 = partial(
+    VGG, ((64,), (128,), (256, 256), (512, 512), (512, 512)), (4096, 4096))
+VGG13 = partial(
+    VGG, ((64, 64), (128, 128), (256, 256), (512, 512), (512, 512)), (4096, 4096))
+VGG16 = partial(
+    VGG, ((64, 64), (128, 128), (256, 256, 256), (512, 512, 512), (512, 512, 512)), (4096, 4096))
+VGG19 = partial(
+    VGG, ((64, 64), (128, 128), (256, 256, 256, 256), (512, 512, 512, 512), (512, 512, 512, 512)), (4096, 4096))
