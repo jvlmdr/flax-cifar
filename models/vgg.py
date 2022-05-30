@@ -1,47 +1,46 @@
-'''VGG11/13/16/19 in Pytorch.'''
-import torch
-import torch.nn as nn
+from functools import partial
+from typing import Callable, Tuple
+
+from flax import linen as nn
+from jax import numpy as jnp
+
+ModuleDef = Callable[..., nn.Module]
 
 
-cfg = {
-    'VGG11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-    'VGG13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-    'VGG16': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
-    'VGG19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
-}
+class Backbone(nn.Module):
+    stages: Tuple[Tuple[int, ...], ...]
+    norm: ModuleDef
+
+    @nn.compact
+    def __call__(self, x, train: bool):
+        for i, stage in enumerate(self.stages):
+            for j, dim in enumerate(stage):
+                suffix = '{:d}_{:d}'.format(i + 1, j + 1)
+                x = nn.Conv(dim, (3, 3), padding=1, use_bias=False, name='conv' + suffix)(x)
+                x = self.norm(use_running_average=not train, name='norm' + suffix)(x)
+                x = nn.relu(x)
+            x = nn.max_pool(x, (2, 2), strides=(2, 2))
+        # x = nn.avg_pool(x, (1, 1), strides=1)
+        return x
 
 
 class VGG(nn.Module):
-    def __init__(self, vgg_name):
-        super(VGG, self).__init__()
-        self.features = self._make_layers(cfg[vgg_name])
-        self.classifier = nn.Linear(512, 10)
+    stages: Tuple[Tuple[int, ...], ...]
+    num_classes: int
+    norm: ModuleDef = nn.BatchNorm
 
-    def forward(self, x):
-        out = self.features(x)
-        out = out.view(out.size(0), -1)
-        out = self.classifier(out)
-        return out
+    def setup(self):
+        self.features = Backbone(stages=self.stages, norm=self.norm)
+        self.classifier = nn.Dense(self.num_classes)
 
-    def _make_layers(self, cfg):
-        layers = []
-        in_channels = 3
-        for x in cfg:
-            if x == 'M':
-                layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
-            else:
-                layers += [nn.Conv2d(in_channels, x, kernel_size=3, padding=1),
-                           nn.BatchNorm2d(x),
-                           nn.ReLU(inplace=True)]
-                in_channels = x
-        layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
-        return nn.Sequential(*layers)
+    def __call__(self, x, train: bool = True):
+        x = self.features(x, train)
+        x = jnp.reshape(x, (x.shape[0], -1))
+        x = self.classifier(x)
+        return x
 
 
-def test():
-    net = VGG('VGG11')
-    x = torch.randn(2,3,32,32)
-    y = net(x)
-    print(y.size())
-
-# test()
+VGG11 = partial(VGG, ((64,), (128,), (256, 256), (512, 512), (512, 512))),
+VGG13 = partial(VGG, ((64, 64), (128, 128), (256, 256), (512, 512), (512, 512)))
+VGG16 = partial(VGG, ((64, 64), (128, 128), (256, 256, 256), (512, 512, 512), (512, 512, 512)))
+VGG19 = partial(VGG, ((64, 64), (128, 128), (256, 256, 256, 256), (512, 512, 512, 512), (512, 512, 512, 512)))
