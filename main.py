@@ -1,4 +1,5 @@
 import collections
+from functools import partial
 import sys
 from typing import Tuple
 
@@ -191,30 +192,25 @@ def make_model(
         config: ml_collections.ConfigDict,
         num_classes: int,
         input_shape: Tuple[int, int, int]) -> nn.Module:
-    if config.model.arch.startswith('resnet'):
+    try:
         model_fn = {
-            'resnet_v1_18': models.resnet_v1.ResNet18,
-            'resnet_v1_34': models.resnet_v1.ResNet34,
-            'resnet_v1_50': models.resnet_v1.ResNet50,
-            'resnet_v2_18': models.resnet_v2.ResNet18,
-            'resnet_v2_34': models.resnet_v2.ResNet34,
-            'resnet_v2_50': models.resnet_v2.ResNet50,
-        }[config.model.arch]
-        model = model_fn(num_classes=num_classes, **config.model.resnet)
-    elif config.model.arch == 'wrn':
-        model = models.wide_resnet.WideResNet(num_classes=num_classes, **config.model.wrn)
-    elif config.model.arch.startswith('densenet'):
-        model_fn = {
-            'densenet_cifar': models.densenet.densenet_cifar,
-            'densenet121': models.densenet.DenseNet121,
-            'densenet169': models.densenet.DenseNet169,
-            'densenet201': models.densenet.DenseNet201,
-            'densenet161': models.densenet.DenseNet161,
-        }[config.model.arch]
-        model = model_fn(num_classes=num_classes)
-    else:
-        raise ValueError('unknown architecture', config.model.arch)
-    return model
+            'resnet_v1_18': partial(models.resnet_v1.ResNet18, stem_variant='cifar'),
+            'resnet_v1_34': partial(models.resnet_v1.ResNet34, stem_variant='cifar'),
+            'resnet_v1_50': partial(models.resnet_v1.ResNet50, stem_variant='cifar'),
+            'resnet_v2_18': partial(models.resnet_v2.ResNet18, stem_variant='cifar'),
+            'resnet_v2_34': partial(models.resnet_v2.ResNet34, stem_variant='cifar'),
+            'resnet_v2_50': partial(models.resnet_v2.ResNet50, stem_variant='cifar'),
+            'wrn28_2': partial(models.wide_resnet.WideResNet, depth=28, width=2),
+            'wrn28_8': partial(models.wide_resnet.WideResNet, depth=28, width=8),
+            'densenet121_12': models.densenet.densenet_cifar,
+            'densenet121_32': models.densenet.DenseNet121,
+            'densenet169_32': models.densenet.DenseNet169,
+            'densenet201_32': models.densenet.DenseNet201,
+            'densenet161_48': models.densenet.DenseNet161,
+        }[config.arch]
+    except KeyError as ex:
+        raise ValueError('unknown architecture', ex)
+    return  model_fn(num_classes=num_classes)
 
 
 if __name__ == '__main__':

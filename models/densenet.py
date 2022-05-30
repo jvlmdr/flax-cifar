@@ -13,11 +13,12 @@ ModuleDef = Callable[..., nn.Module]
 
 class Bottleneck(nn.Module):
     growth_rate: int
+    norm: ModuleDef = nn.BatchNorm
 
     def setup(self):
-        self.bn1 = nn.BatchNorm()
+        self.bn1 = self.norm()
         self.conv1 = nn.Conv(4 * self.growth_rate, (1, 1), use_bias=False)
-        self.bn2 = nn.BatchNorm()
+        self.bn2 = self.norm()
         self.conv2 = nn.Conv(self.growth_rate, (3, 3), padding=(1, 1), use_bias=False)
 
     def __call__(self, x, train: bool):
@@ -29,9 +30,10 @@ class Bottleneck(nn.Module):
 
 class Transition(nn.Module):
     out_planes: int
+    norm: ModuleDef = nn.BatchNorm
 
     def setup(self):
-        self.bn = nn.BatchNorm()
+        self.bn = self.norm()
         self.conv = nn.Conv(self.out_planes, (1, 1), use_bias=False)
 
     def __call__(self, x, train: bool):
@@ -55,6 +57,7 @@ class DenseNet(nn.Module):
     num_classes: int
     growth_rate: int
     reduction: float = 0.5
+    norm: ModuleDef = nn.BatchNorm
 
     def setup(self):
         num_planes = 2 * self.growth_rate
@@ -63,32 +66,32 @@ class DenseNet(nn.Module):
         self.dense1 = self._make_dense_layers(self.block, self.nblocks[0])
         num_planes += self.nblocks[0] * self.growth_rate
         out_planes = int(num_planes * self.reduction)
-        self.trans1 = Transition(out_planes)
+        self.trans1 = Transition(out_planes, norm=self.norm)
         num_planes = out_planes
 
         self.dense2 = self._make_dense_layers(self.block, self.nblocks[1])
         num_planes += self.nblocks[1] * self.growth_rate
         out_planes = int(num_planes * self.reduction)
-        self.trans2 = Transition(out_planes)
+        self.trans2 = Transition(out_planes, norm=self.norm)
         num_planes = out_planes
 
         self.dense3 = self._make_dense_layers(self.block, self.nblocks[2])
         num_planes += self.nblocks[2] * self.growth_rate
         out_planes = int(num_planes * self.reduction)
-        self.trans3 = Transition(out_planes)
+        self.trans3 = Transition(out_planes, norm=self.norm)
         num_planes = out_planes
 
         self.dense4 = self._make_dense_layers(self.block, self.nblocks[3])
         num_planes += self.nblocks[3] * self.growth_rate
 
-        self.bn = nn.BatchNorm()
+        self.bn = self.norm()
         self.linear = nn.Dense(self.num_classes)
 
     @nn.nowrap
     def _make_dense_layers(self, block, nblock):
         layers = []
         for i in range(nblock):
-            layers.append(block(self.growth_rate))
+            layers.append(block(self.growth_rate, norm=self.norm))
         return Sequential(layers)
 
     def __call__(self, x, train: bool = True):

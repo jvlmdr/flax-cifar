@@ -35,12 +35,12 @@ class ResNetBlock(nn.Module):
     """ResNet block."""
     filters: int
     conv: ModuleDef
-    norm: ModuleDef
+    norm: ModuleDef  # May already have `use_running_average` set.
     act: Callable
     strides: Tuple[int, int] = (1, 1)
 
     @nn.compact
-    def __call__(self, x,):
+    def __call__(self, x):
         residual = x
         y = self.conv(self.filters, (3, 3), self.strides)(x)
         y = self.norm()(y)
@@ -60,7 +60,7 @@ class BottleneckResNetBlock(nn.Module):
     """Bottleneck ResNet block."""
     filters: int
     conv: ModuleDef
-    norm: ModuleDef
+    norm: ModuleDef  # May already have `use_running_average` set.
     act: Callable
     strides: Tuple[int, int] = (1, 1)
 
@@ -93,17 +93,14 @@ class ResNet(nn.Module):
     dtype: Any = jnp.float32
     act: Callable = nn.relu
     conv: ModuleDef = nn.Conv
+    norm: ModuleDef = nn.BatchNorm  # Must support `use_running_average`.
     stem_variant: bool = False
 
     @nn.compact
     def __call__(self, x, train: bool = True):
         assert self.stem_variant in ('imagenet', 'cifar')
         conv = partial(self.conv, use_bias=False, dtype=self.dtype)
-        norm = partial(nn.BatchNorm,
-                       use_running_average=not train,
-                       momentum=0.9,
-                       epsilon=1e-5,
-                       dtype=self.dtype)
+        norm = partial(self.norm, use_running_average=not train)
 
         if self.stem_variant == 'cifar':
             # 3x3 conv with stride 1

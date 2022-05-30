@@ -1,15 +1,6 @@
 def get_config():
     return {
-        'model': {
-            'arch': 'wide_resnet',
-            'resnet': {
-                'stem_variant': 'cifar',
-            },
-            'wrn': {
-                'depth': 28,
-                'width': 2,
-            },
-        },
+        'arch': 'wrn28_2',
         'train': {
             'base_learning_rate': 0.1,
             'num_epochs': 50,

@@ -30,8 +30,7 @@ from jax import numpy as jnp
 
 __all__ = ['ResNetV2', 'ResNet18', 'ResNet34', 'ResNet50', 'ResNet101', 'ResNet152', 'ResNet200']
 
-BN_MOM = 0.9
-BN_EPS = 1e-5
+ModuleDef = Callable[..., nn.Module]
 
 
 def conv_args(kernel_size: int,
@@ -60,15 +59,15 @@ class ResNetV2Block(nn.Module):
         stride: stride for 3x3 convolution and projection convolution in this block.
         use_projection: if True then include projection convolution into this block.
         bottleneck: if True then make bottleneck block.
-        normalization_fn: module which used as normalization function.
-        activation_fn: activation function.
+        norm: module which used as normalization function.
+        act: activation function.
     """
     nout: int
     stride: Union[int, Sequence[int]]
     use_projection: bool
     bottleneck: bool
-    normalization_fn: Callable[..., nn.Module] = partial(nn.BatchNorm, momentum=BN_MOM, epsilon=BN_EPS)
-    activation_fn: Callable = nn.relu
+    norm: ModuleDef = nn.BatchNorm  # May already have `use_running_average` set.
+    act: Callable = nn.relu
 
     def setup(self):
         """Creates ResNetV2Block instance."""
@@ -76,19 +75,19 @@ class ResNetV2Block(nn.Module):
             self.proj_conv = nn.Conv(self.nout, (1, 1), strides=self.stride, **conv_args(1, self.nout))
 
         if self.bottleneck:
-            self.norm_0 = self.normalization_fn()
+            self.norm_0 = self.norm()
             self.conv_0 = nn.Conv(self.nout // 4, (1, 1), strides=1, **conv_args(1, self.nout // 4))
-            self.norm_1 = self.normalization_fn()
+            self.norm_1 = self.norm()
             self.conv_1 = nn.Conv(self.nout // 4, (3, 3), strides=self.stride, **conv_args(3, self.nout // 4, (1, 1)))
-            self.norm_2 = self.normalization_fn()
+            self.norm_2 = self.norm()
             self.conv_2 = nn.Conv(self.nout, (1, 1), strides=1, **conv_args(1, self.nout))
         else:
-            self.norm_0 = self.normalization_fn()
+            self.norm_0 = self.norm()
             self.conv_0 = nn.Conv(self.nout, (3, 3), strides=1, **conv_args(3, self.nout, (1, 1)))
-            self.norm_1 = self.normalization_fn()
+            self.norm_1 = self.norm()
             self.conv_1 = nn.Conv(self.nout, (3, 3), strides=self.stride, **conv_args(3, self.nout, (1, 1)))
 
-    def __call__(self, x, train: bool):
+    def __call__(self, x):
         if self.stride > 1:
             shortcut = nn.max_pool(x, (1, 1), strides=(self.stride, self.stride))
         else:
@@ -100,8 +99,8 @@ class ResNetV2Block(nn.Module):
             layers = ((self.norm_0, self.conv_0), (self.norm_1, self.conv_1))
 
         for i, (bn_i, conv_i) in enumerate(layers):
-            x = bn_i(x, use_running_average=not train)
-            x = self.activation_fn(x)
+            x = bn_i(x)
+            x = self.act(x)
             if i == 0 and self.use_projection:
                 shortcut = self.proj_conv(x)
             x = conv_i(x)
@@ -118,16 +117,16 @@ class ResNetV2BlockGroup(nn.Module):
         stride: stride for 3x3 convolutions and projection convolutions in Resnet blocks.
         use_projection: if True then include projection convolution into each Resnet blocks.
         bottleneck: if True then make bottleneck blocks.
-        normalization_fn: module which used as normalization function.
-        activation_fn: activation function.
+        norm: module which used as normalization function.
+        act: activation function.
     """
     nout: int
     num_blocks: int
     stride: Union[int, Sequence[int]]
     use_projection: bool
     bottleneck: bool
-    normalization_fn: Callable[..., nn.Module] = partial(nn.BatchNorm, momentum=BN_MOM, epsilon=BN_EPS)
-    activation_fn: Callable = nn.relu
+    norm: ModuleDef = nn.BatchNorm  # May already have `use_running_average` set.
+    act: Callable = nn.relu
 
     def setup(self):
         """Creates ResNetV2BlockGroup instance."""
@@ -139,15 +138,13 @@ class ResNetV2BlockGroup(nn.Module):
                     stride=(self.stride if i == self.num_blocks - 1 else 1),
                     use_projection=(i == 0 and self.use_projection),
                     bottleneck=self.bottleneck,
-                    normalization_fn=self.normalization_fn,
-                    activation_fn=self.activation_fn))
+                    norm=self.norm,
+                    act=self.act))
         self.blocks = blocks
 
-    def __call__(self, x, train: bool):
-        # Cannot use nn.Sequential because must pass train.
-        # Could use @nn.compact, but it may be convenient to have blocks later.
+    def __call__(self, x):
         for block in self.blocks:
-            x = block(x, train)
+            x = block(x)
         return x
 
 
@@ -161,8 +158,8 @@ class ResNetV2(nn.Module):
         bottleneck: if True then use bottleneck blocks.
         channels_per_group: number of output channels for each block group.
         group_strides: strides for each block group.
-        normalization_fn: module which used as normalization function.
-        activation_fn: activation function.
+        norm: module which used as normalization function.
+        act: activation function.
         stem_variant: 'imagenet' or 'cifar'
     """
     num_classes: int
@@ -171,8 +168,8 @@ class ResNetV2(nn.Module):
     channels_per_group: Sequence[int] = (256, 512, 1024, 2048)
     group_strides: Sequence[int] = (1, 2, 2, 2)
     group_use_projection: Sequence[bool] = (True, True, True, True)
-    normalization_fn: Callable[..., nn.Module] = partial(nn.BatchNorm, momentum=BN_MOM, epsilon=BN_EPS)
-    activation_fn: Callable = nn.relu
+    norm: ModuleDef = nn.BatchNorm  # Must support `use_running_average`.
+    act: Callable = nn.relu
     stem_variant: str = 'cifar'
 
     @nn.compact
@@ -182,6 +179,7 @@ class ResNetV2(nn.Module):
         assert len(self.group_strides) == len(self.blocks_per_group)
         assert len(self.group_use_projection) == len(self.blocks_per_group)
         assert self.stem_variant in ('imagenet', 'cifar')
+        norm = partial(self.norm, use_running_average=not train)
 
         if self.stem_variant == 'cifar':
             # 3x3 conv with stride 1
@@ -199,12 +197,12 @@ class ResNetV2(nn.Module):
                 stride=self.group_strides[i],
                 bottleneck=self.bottleneck,
                 use_projection=self.group_use_projection[i],
-                normalization_fn=self.normalization_fn,
-                activation_fn=self.activation_fn,
-            )(x, train)
+                norm=norm,
+                act=self.act,
+            )(x)
 
-        x = self.normalization_fn()(x, use_running_average=not train)
-        x = self.activation_fn(x)
+        x = norm()(x)
+        x = self.act(x)
         x = jnp.mean(x, axis=(-3, -2))
         x = nn.Dense(self.num_classes, kernel_init=nn.initializers.glorot_normal())(x)
         return x
