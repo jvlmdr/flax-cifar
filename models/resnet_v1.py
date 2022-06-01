@@ -28,30 +28,31 @@ from typing import Any, Callable, Sequence, Tuple
 from flax import linen as nn
 import jax.numpy as jnp
 
-ModuleDef = Any
+ModuleDef = Callable[..., nn.Module]
 
 
 class ResNetBlock(nn.Module):
     """ResNet block."""
     filters: int
     conv: ModuleDef
-    norm: ModuleDef  # May already have `use_running_average` set.
+    norm: ModuleDef
     act: Callable
     strides: Tuple[int, int] = (1, 1)
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
         residual = x
         y = self.conv(self.filters, (3, 3), self.strides)(x)
-        y = self.norm()(y)
+        y = self.norm()(y, **norm_kwargs)
         y = self.act(y)
         y = self.conv(self.filters, (3, 3))(y)
-        y = self.norm(scale_init=nn.initializers.zeros)(y)
+        y = self.norm(scale_init=nn.initializers.zeros)(y, **norm_kwargs)
 
         if residual.shape != y.shape:
             residual = self.conv(self.filters, (1, 1),
                                  self.strides, name='conv_proj')(residual)
-            residual = self.norm(name='norm_proj')(residual)
+            residual = self.norm(name='norm_proj')(residual, **norm_kwargs)
 
         return self.act(residual + y)
 
@@ -60,26 +61,27 @@ class BottleneckResNetBlock(nn.Module):
     """Bottleneck ResNet block."""
     filters: int
     conv: ModuleDef
-    norm: ModuleDef  # May already have `use_running_average` set.
+    norm: ModuleDef
     act: Callable
     strides: Tuple[int, int] = (1, 1)
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
         residual = x
         y = self.conv(self.filters, (1, 1))(x)
-        y = self.norm()(y)
+        y = self.norm()(y, **norm_kwargs)
         y = self.act(y)
         y = self.conv(self.filters, (3, 3), self.strides)(y)
-        y = self.norm()(y)
+        y = self.norm()(y, **norm_kwargs)
         y = self.act(y)
         y = self.conv(self.filters * 4, (1, 1))(y)
-        y = self.norm(scale_init=nn.initializers.zeros)(y)
+        y = self.norm(scale_init=nn.initializers.zeros)(y, **norm_kwargs)
 
         if residual.shape != y.shape:
             residual = self.conv(self.filters * 4, (1, 1),
                                  self.strides, name='conv_proj')(residual)
-            residual = self.norm(name='norm_proj')(residual)
+            residual = self.norm(name='norm_proj')(residual, **norm_kwargs)
 
         return self.act(residual + y)
 
@@ -93,24 +95,24 @@ class ResNet(nn.Module):
     dtype: Any = jnp.float32
     act: Callable = nn.relu
     conv: ModuleDef = nn.Conv
-    norm: ModuleDef = nn.BatchNorm  # Must support `use_running_average`.
-    stem_variant: bool = False
+    stem_variant: str = 'imagenet'
+    norm: ModuleDef = nn.BatchNorm
 
     @nn.compact
-    def __call__(self, x, train: bool = True):
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
         assert self.stem_variant in ('imagenet', 'cifar')
         conv = partial(self.conv, use_bias=False, dtype=self.dtype)
-        norm = partial(self.norm, use_running_average=not train)
 
         if self.stem_variant == 'cifar':
             # 3x3 conv with stride 1
             x = conv(self.num_filters, (3, 3), (1, 1), padding=[(1, 1), (1, 1)], name='conv_init')(x)
-            x = norm(name='bn_init')(x)
+            x = self.norm(name='bn_init')(x, **norm_kwargs)
             x = nn.relu(x)
         else:
             # 7x7 conv with stride 2, 3x3 max pool with stride 2
             x = conv(self.num_filters, (7, 7), (2, 2), padding=[(3, 3), (3, 3)], name='conv_init')(x)
-            x = norm(name='bn_init')(x)
+            x = self.norm(name='bn_init')(x, **norm_kwargs)
             x = nn.relu(x)
             x = nn.max_pool(x, (3, 3), strides=(2, 2), padding='SAME')
 
@@ -120,9 +122,9 @@ class ResNet(nn.Module):
                 x = self.block_cls(self.num_filters * 2 ** i,
                                    strides=strides,
                                    conv=conv,
-                                   norm=norm,
-                                   act=self.act)(x)
-        x = jnp.mean(x, axis=(1, 2))
+                                   norm=self.norm,
+                                   act=self.act)(x, norm_kwargs=norm_kwargs)
+        x = jnp.mean(x, axis=(-3, -2))
         x = nn.Dense(self.num_classes, dtype=self.dtype)(x)
         x = jnp.asarray(x, self.dtype)
         return x

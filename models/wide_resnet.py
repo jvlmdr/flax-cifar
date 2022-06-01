@@ -52,7 +52,7 @@ class WRNBlock(nn.Module):
     nin: int
     nout: int
     stride: int = 1
-    norm: ModuleDef = nn.BatchNorm  # May already have `use_running_average` set.
+    norm: ModuleDef = nn.BatchNorm
 
     def setup(self):
         if self.nin != self.nout or self.stride > 1:
@@ -65,37 +65,38 @@ class WRNBlock(nn.Module):
         self.norm_2 = self.norm()
         self.conv_2 = nn.Conv(self.nout, (3, 3), strides=1, **conv_args(3, self.nout))
 
-    def __call__(self, x):
-        o1 = nn.relu(self.norm_1(x))
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
+        o1 = nn.relu(self.norm_1(x, **norm_kwargs))
         y = self.conv_1(o1)
-        o2 = nn.relu(self.norm_2(y))
+        o2 = nn.relu(self.norm_2(y, **norm_kwargs))
         z = self.conv_2(o2)
         return z + self.proj_conv(o1) if self.proj_conv else z + x
 
 
 class WideResNetGeneral(nn.Module):
     """Base WideResNet implementation."""
-    nclass: int
+    num_classes: int
     blocks_per_group: Tuple[int]
     width: int
-    norm: ModuleDef = nn.BatchNorm  # Must support `use_running_average`.
+    norm: ModuleDef = nn.BatchNorm
 
     @nn.compact
-    def __call__(self, x, train: bool = True):
-        norm = partial(self.norm, use_running_average=not train)
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
         widths = [int(v * self.width) for v in [16 * (2 ** i) for i in range(len(self.blocks_per_group))]]
         n = 16
         x = nn.Conv(n, (3, 3), **conv_args(3, n))(x)
         for i, (block, width) in enumerate(zip(self.blocks_per_group, widths)):
             stride = 2 if i > 0 else 1
-            x = WRNBlock(n, width, stride, norm)(x)
+            x = WRNBlock(n, width, stride, self.norm)(x, norm_kwargs=norm_kwargs)
             for b in range(1, block):
-                x = WRNBlock(width, width, 1, norm)(x)
+                x = WRNBlock(width, width, 1, self.norm)(x, norm_kwargs=norm_kwargs)
             n = width
-        x = norm()(x)
+        x = self.norm()(x, **norm_kwargs)
         x = nn.relu(x)
         x = jnp.mean(x, axis=(-3, -2))
-        x = nn.Dense(self.nclass, kernel_init=nn.initializers.glorot_normal())(x)
+        x = nn.Dense(self.num_classes, kernel_init=nn.initializers.glorot_normal())(x)
         return x
 
 

@@ -66,7 +66,7 @@ class ResNetV2Block(nn.Module):
     stride: Union[int, Sequence[int]]
     use_projection: bool
     bottleneck: bool
-    norm: ModuleDef = nn.BatchNorm  # May already have `use_running_average` set.
+    norm: ModuleDef = nn.BatchNorm
     act: Callable = nn.relu
 
     def setup(self):
@@ -87,7 +87,8 @@ class ResNetV2Block(nn.Module):
             self.norm_1 = self.norm()
             self.conv_1 = nn.Conv(self.nout, (3, 3), strides=self.stride, **conv_args(3, self.nout, (1, 1)))
 
-    def __call__(self, x):
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
         if self.stride > 1:
             shortcut = nn.max_pool(x, (1, 1), strides=(self.stride, self.stride))
         else:
@@ -99,7 +100,7 @@ class ResNetV2Block(nn.Module):
             layers = ((self.norm_0, self.conv_0), (self.norm_1, self.conv_1))
 
         for i, (bn_i, conv_i) in enumerate(layers):
-            x = bn_i(x)
+            x = bn_i(x, **norm_kwargs)
             x = self.act(x)
             if i == 0 and self.use_projection:
                 shortcut = self.proj_conv(x)
@@ -125,7 +126,7 @@ class ResNetV2BlockGroup(nn.Module):
     stride: Union[int, Sequence[int]]
     use_projection: bool
     bottleneck: bool
-    norm: ModuleDef = nn.BatchNorm  # May already have `use_running_average` set.
+    norm: ModuleDef = nn.BatchNorm
     act: Callable = nn.relu
 
     def setup(self):
@@ -142,9 +143,9 @@ class ResNetV2BlockGroup(nn.Module):
                     act=self.act))
         self.blocks = blocks
 
-    def __call__(self, x):
+    def __call__(self, x, norm_kwargs=None):
         for block in self.blocks:
-            x = block(x)
+            x = block(x, norm_kwargs=norm_kwargs)
         return x
 
 
@@ -152,7 +153,6 @@ class ResNetV2(nn.Module):
     """Base implementation of ResNet v2 from https://arxiv.org/abs/1603.05027.
 
     Args:
-        in_channels: number of channels in the input image.
         num_classes: number of output classes.
         blocks_per_group: number of blocks in each block group.
         bottleneck: if True then use bottleneck blocks.
@@ -168,18 +168,18 @@ class ResNetV2(nn.Module):
     channels_per_group: Sequence[int] = (256, 512, 1024, 2048)
     group_strides: Sequence[int] = (1, 2, 2, 2)
     group_use_projection: Sequence[bool] = (True, True, True, True)
-    norm: ModuleDef = nn.BatchNorm  # Must support `use_running_average`.
+    norm: ModuleDef = nn.BatchNorm
     act: Callable = nn.relu
-    stem_variant: str = 'cifar'
+    stem_variant: str = 'imagenet'
 
     @nn.compact
-    def __call__(self, x, train: bool = True):
+    def __call__(self, x, norm_kwargs=None):
         """Creates ResNetV2 instance."""
+        norm_kwargs = norm_kwargs or {}
+        assert self.stem_variant in ('imagenet', 'cifar')
         assert len(self.channels_per_group) == len(self.blocks_per_group)
         assert len(self.group_strides) == len(self.blocks_per_group)
         assert len(self.group_use_projection) == len(self.blocks_per_group)
-        assert self.stem_variant in ('imagenet', 'cifar')
-        norm = partial(self.norm, use_running_average=not train)
 
         if self.stem_variant == 'cifar':
             # 3x3 conv with stride 1
@@ -197,11 +197,11 @@ class ResNetV2(nn.Module):
                 stride=self.group_strides[i],
                 bottleneck=self.bottleneck,
                 use_projection=self.group_use_projection[i],
-                norm=norm,
+                norm=self.norm,
                 act=self.act,
-            )(x)
+            )(x, norm_kwargs=norm_kwargs)
 
-        x = norm()(x)
+        x = self.norm()(x, **norm_kwargs)
         x = self.act(x)
         x = jnp.mean(x, axis=(-3, -2))
         x = nn.Dense(self.num_classes, kernel_init=nn.initializers.glorot_normal())(x)

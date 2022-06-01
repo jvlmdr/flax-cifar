@@ -14,12 +14,13 @@ class Backbone(nn.Module):
     norm: ModuleDef = nn.BatchNorm
 
     @nn.compact
-    def __call__(self, x, train: bool = True):
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
         for i, stage in enumerate(self.stages):
             for j, dim in enumerate(stage):
                 suffix = '{:d}_{:d}'.format(i + 1, j + 1)
                 x = nn.Conv(dim, (3, 3), padding=1, use_bias=False, name='conv' + suffix)(x)
-                x = self.norm(use_running_average=not train, name='norm' + suffix)(x)
+                x = self.norm(name='norm' + suffix)(x, **norm_kwargs)
                 x = nn.relu(x)
             x = nn.max_pool(x, (2, 2), strides=(2, 2))
         # x = nn.avg_pool(x, (1, 1), strides=1)
@@ -31,10 +32,11 @@ class MLP(nn.Module):
     norm: ModuleDef = nn.BatchNorm
 
     @nn.compact
-    def __call__(self, x, train: bool = True):
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
         for dim in self.dims:
             x = nn.Dense(dim, use_bias=False)(x)
-            x = self.norm(use_running_average=not train)(x)
+            x = self.norm()(x, **norm_kwargs)
             x = nn.relu(x)
         return x
 
@@ -51,11 +53,12 @@ class VGG(nn.Module):
             self.mlp = MLP(self.mlp_dims, norm=self.norm)
         self.classifier = nn.Dense(self.num_classes)
 
-    def __call__(self, x, train: bool = True):
-        x = self.backbone(x, train)
-        x = jnp.reshape(x, (x.shape[0], -1))
+    def __call__(self, x, norm_kwargs=None):
+        norm_kwargs = norm_kwargs or {}
+        x = self.backbone(x, norm_kwargs=norm_kwargs)
+        x = jnp.reshape(x, (*x.shape[:-3], -1))
         if self.mlp_dims:
-            x = self.mlp(x, train)
+            x = self.mlp(x, norm_kwargs=norm_kwargs)
         x = self.classifier(x)
         return x
 

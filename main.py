@@ -1,7 +1,7 @@
 import collections
 from functools import partial
 import sys
-from typing import Tuple
+from typing import Callable, Tuple
 
 from absl import app
 from absl import flags
@@ -38,6 +38,7 @@ config_flags.DEFINE_config_file('config')
 FLAGS = flags.FLAGS
 
 Dataset = torch.utils.data.Dataset
+ModuleDef = Callable[..., nn.Module]
 
 
 def main(_):
@@ -62,9 +63,12 @@ def main(_):
         num_workers=FLAGS.loader_num_workers,
         prefetch_factor=FLAGS.loader_prefetch_factor)
 
-    model = make_model(config, num_classes, input_shape)
+    norm = nn.BatchNorm
+    norm_kwargs = lambda train: {'use_running_average': not train}
+
+    model = make_model(config, num_classes, input_shape, norm=norm)
     rng_init, _ = random.split(random.PRNGKey(0))
-    init_vars = model.init(rng_init, jnp.zeros((1,) + input_shape))
+    init_vars = model.init(rng_init, jnp.zeros((1,) + input_shape), norm_kwargs=norm_kwargs(train=True))
     params, batch_stats = init_vars['params'], init_vars['batch_stats']
 
     print('params:')
@@ -93,7 +97,9 @@ def main(_):
         # Returns scalar loss and one auxiliary output.
         inputs, labels = data
         model_vars = {'params': params, **mutable_vars}
-        outputs, mutated_vars = model.apply(model_vars, inputs, train=True, mutable=list(mutable_vars.keys()))
+        outputs, mutated_vars = model.apply(
+            model_vars, inputs, norm_kwargs=norm_kwargs(train=True),
+            mutable=list(mutable_vars.keys()))
         example_loss = loss_with_logits(labels, outputs)
         data_loss = jnp.mean(example_loss)
         if config.train.weight_decay_vars == 'all':
@@ -117,7 +123,9 @@ def main(_):
 
     @jax.jit
     def apply_model(params, batch_stats, inputs):
-        return model.apply({'params': params, 'batch_stats': batch_stats}, inputs, train=False)
+        return model.apply(
+            {'params': params, 'batch_stats': batch_stats}, inputs,
+            norm_kwargs=norm_kwargs(train=False))
 
     for epoch in range(config.train.num_epochs + 1):
         metrics = {}
@@ -190,7 +198,8 @@ def setup_data() -> Tuple[int, Tuple[int, int, int], Dataset, Dataset]:
 def make_model(
         config: ml_collections.ConfigDict,
         num_classes: int,
-        input_shape: Tuple[int, int, int]) -> nn.Module:
+        input_shape: Tuple[int, int, int],
+        norm: ModuleDef = nn.BatchNorm) -> nn.Module:
     try:
         model_fn = {
             'resnet_v1_18': partial(models.resnet_v1.ResNet18, stem_variant='cifar'),
@@ -217,7 +226,7 @@ def make_model(
         }[config.arch]
     except KeyError as ex:
         raise ValueError('unknown architecture', ex)
-    return  model_fn(num_classes=num_classes)
+    return  model_fn(num_classes=num_classes, norm=norm)
 
 
 if __name__ == '__main__':
