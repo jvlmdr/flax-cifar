@@ -41,8 +41,8 @@ class MLP(nn.Module):
 
 class VGG(nn.Module):
     conv_stages: Tuple[Tuple[int, ...], ...]
-    mlp_dims: Tuple[int, ...]
     num_classes: int
+    mlp_dims: Tuple[int, ...] = ()
     norm: ModuleDef = nn.BatchNorm
 
     def setup(self):
@@ -60,20 +60,16 @@ class VGG(nn.Module):
         return x
 
 
-LiteVGG11 = partial(
-    VGG, ((64,), (128,), (256, 256), (512, 512), (512, 512)), ())
-LiteVGG13 = partial(
-    VGG, ((64, 64), (128, 128), (256, 256), (512, 512), (512, 512)), ())
-LiteVGG16 = partial(
-    VGG, ((64, 64), (128, 128), (256, 256, 256), (512, 512, 512), (512, 512, 512)), ())
-LiteVGG19 = partial(
-    VGG, ((64, 64), (128, 128), (256, 256, 256, 256), (512, 512, 512, 512), (512, 512, 512, 512)), ())
+VGG11Backbone = partial(
+    VGG, ((64,), (128,), (256, 256), (512, 512), (512, 512)))
+VGG13Backbone = partial(
+    VGG, ((64, 64), (128, 128), (256, 256), (512, 512), (512, 512)))
+VGG16Backbone = partial(
+    VGG, ((64, 64), (128, 128), (256, 256, 256), (512, 512, 512), (512, 512, 512)))
+VGG19Backbone = partial(
+    VGG, ((64, 64), (128, 128), (256, 256, 256, 256), (512, 512, 512, 512), (512, 512, 512, 512)))
 
-VGG11 = partial(
-    VGG, ((64,), (128,), (256, 256), (512, 512), (512, 512)), (4096, 4096))
-VGG13 = partial(
-    VGG, ((64, 64), (128, 128), (256, 256), (512, 512), (512, 512)), (4096, 4096))
-VGG16 = partial(
-    VGG, ((64, 64), (128, 128), (256, 256, 256), (512, 512, 512), (512, 512, 512)), (4096, 4096))
-VGG19 = partial(
-    VGG, ((64, 64), (128, 128), (256, 256, 256, 256), (512, 512, 512, 512), (512, 512, 512, 512)), (4096, 4096))
+VGG11 = partial(VGG11Backbone, mlp_dims=(4096, 4096))
+VGG13 = partial(VGG13Backbone, mlp_dims=(4096, 4096))
+VGG16 = partial(VGG16Backbone, mlp_dims=(4096, 4096))
+VGG19 = partial(VGG19Backbone, mlp_dims=(4096, 4096))
