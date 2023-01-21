@@ -42,7 +42,7 @@ Refer to the [wandb project](https://wandb.ai/jvlmdr/flax-cifar).
 ### Usage
 
 ```bash
-python main.py --dataset_root=path/to/cifar10 --config=configs/default.py --config.model.arch=resnet_v1_18
+python main.py --dataset_root=path/to/cifar10 --config=configs/default.py --config.arch=resnet_v1_18
 ```
 
 
@@ -52,6 +52,7 @@ python main.py --dataset_root=path/to/cifar10 --config=configs/default.py --conf
 absl-py
 flax
 jax[cuda]
+jaxopt
 ml_collections
 numpy 
 torch
@@ -59,3 +60,4 @@ torchvision
 tqdm
 wandb
 ```
+To install jax with CUDA, refer to the [installation instructions](https://github.com/google/jax#installation).
